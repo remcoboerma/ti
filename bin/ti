@@ -87,6 +87,27 @@ def blue(str):
         return str
 
 
+def grey(str):
+    return str
+
+
+def cyan(str):
+    if use_color:
+        return Fore.CYAN + str + Fore.RESET
+    else:
+        return str
+
+
+color_by_type = {
+    'dc': yellow,
+    'int': red,
+    'brk': green,
+    'dv': cyan,
+    'aw': cyan,
+    'default': grey
+}
+
+
 def action_on(name, time):
     data = store.load()
     work = data['work']
@@ -240,7 +261,8 @@ def action_log(period):
             name_part = name[len(type_part) + 1:].lstrip()
         else:
             type_part, name_part = '', name
-        print(type_part.rjust(type_part_len) + ':', name_part.ljust(name_col_len), ' - ', item['tmsg'],
+        colorify = color_by_type.get(type_part.lower(), color_by_type['default'])
+        print(type_part.rjust(type_part_len) + ':', colorify(name_part.ljust(name_col_len)), ' - ', item['tmsg'],
               end=green(' < working\n') if current == name else '\n')
 
 
