@@ -11,7 +11,7 @@ Usage:
   ti (s|status)
   ti (t|tag) <tag>...
   ti (n|note) <note-text>...
-  ti (l|log) [today]
+  ti (l|log) [today|[last|a] week|<time>]
   ti (e|edit)
   ti (i|interrupt)
   ti --no-color
@@ -25,6 +25,7 @@ Options:
                     idea to avoid whitespace.
   <note-text>...    Some arbitrary text to be added as `notes` to the currently
                     working project.
+  [today]           Optionally show only after 00:00:00 today.
 """
 
 from __future__ import print_function
@@ -163,7 +164,9 @@ def action_interrupt(name, time):
     interrupt_stack.append(interrupted)
     store.dump(data)
 
-    action_on('int: ' + name, time)
+    # if no prefix is given, prefix it with 'int:'
+    name = 'int: ' + name if ':' not in name[0:6] else name
+    action_on(name, time)
     print('You are now %d deep in interrupts.' % len(interrupt_stack))
 
 
@@ -215,22 +218,53 @@ def action_status():
     print('You have been working on {0} for {1}.'
             .format(green(current['name']), diff))
 
+
+def seconds_to_time_message(seconds):
+    tmsg = []
+
+    if seconds > 3600 * 24:
+        days = int(seconds / (3600 * 24))
+        seconds -= days * 3600 * 24
+        tmsg.append(str(days) + ' day' + ('s' if days > 1 else '') + ', ')
+
+    if seconds > 3600:
+        hours = int(seconds / 3600)
+        seconds -= hours * 3600
+        tmsg.append(str(hours) + ' hour' + ('s' if hours > 1 else '') + ', ')
+
+    if seconds > 60:
+        mins = int(seconds / 60)
+        seconds -= mins * 60
+        tmsg.append(str(mins) + ' minute' + ('s' if mins > 1 else '') + ' & ')
+
+    if seconds:
+        tmsg.append(str(seconds) + ' second' + ('s' if seconds > 1 else ''))
+    return ''.join(tmsg)
+
+
 def action_log(period):
     data = store.load()
     work = data['work'] + data['interrupt_stack']
     log = defaultdict(lambda: {'delta': timedelta()})
     current = None
 
+    # convert "today", "3 hours ago" etc.
+    period = parse_engtime(period) if period else None
+
     for item in work:
+        # only work on items within the specified period
+        end_time = parse_isotime(item['end']) if 'end' in item else datetime.utcnow()
+        if period and end_time < period:
+            # skip to next line
+            continue
         start_time = parse_isotime(item['start'])
-        if 'end' in item:
-            log[item['name']]['delta'] += parse_isotime(item['end']) - start_time
-        else:
-            log[item['name']]['delta'] += datetime.utcnow() - start_time
+        log[item['name']]['delta'] += end_time - start_time
+        if 'end' not in item:
             current = item['name']
 
     name_col_len = 0
     type_part_len = 0
+    logged_seconds = 0
     for name, item in log.items():
         name_col_len = max(name_col_len, len(name))
         if ':' in name:
@@ -238,22 +272,8 @@ def action_log(period):
             type_part_len = max(type_part_len, len(type_part))
 
         secs = item['delta'].seconds
-        tmsg = []
-
-        if secs > 3600:
-            hours = int(secs / 3600)
-            secs -= hours * 3600
-            tmsg.append(str(hours) + ' hour' + ('s' if hours > 1 else '') + ', ')
-
-        if secs > 60:
-            mins = int(secs / 60)
-            secs -= mins * 60
-            tmsg.append(str(mins) + ' minute' + ('s' if mins > 1 else '') + ' & ')
-
-        if secs:
-            tmsg.append(str(secs) + ' second' + ('s' if secs > 1 else ''))
-
-        log[name]['tmsg'] = ''.join(tmsg)
+        logged_seconds += item['delta'].seconds
+        log[name]['tmsg'] = seconds_to_time_message(secs)
 
     for name, item in sorted(log.items(), key=(lambda x: x[1]), reverse=True):
         if ':' in name:
@@ -264,6 +284,7 @@ def action_log(period):
         colorify = color_by_type.get(type_part.lower(), color_by_type['default'])
         print(type_part.rjust(type_part_len) + ':', colorify(name_part.ljust(name_col_len)), ' - ', item['tmsg'],
               end=green(' < working\n') if current == name else '\n')
+    print('\nSum: ' + cyan(seconds_to_time_message(logged_seconds)))
 
 
 def action_edit():
@@ -320,6 +341,9 @@ def parse_engtime(timestr):
     if not timestr or timestr.strip() == 'now':
         return now
 
+    if timestr.strip() == 'today':
+        return datetime(year=now.year, month=now.month, day=now.day)
+
     match = re.match(r'(\d+|a) \s* (s|secs?|seconds?) \s+ ago $', timestr, re.X)
     if match is not None:
         n = match.group(1)
@@ -337,6 +361,18 @@ def parse_engtime(timestr):
         n = match.group(1)
         hours = 1 if n in ['a', 'an'] else int(n)
         return now - timedelta(hours=hours)
+
+    match = re.match(r'(\d+|a) \s* (days?) (\s+ ago)? $', timestr, re.X)
+    if match is not None:
+        n = match.group(1)
+        days = 1 if n in ['a'] else int(n)
+        return now - timedelta(days=days)
+
+    match = re.match(r'(\d+|a|last) \s* (weeks?) (\s+ ago)? $', timestr, re.X)
+    if match is not None:
+        n = match.group(1)
+        weeks = 1 if n in ['a', 'last'] else int(n)
+        return now - timedelta(weeks=weeks)
 
     raise ValueError("Don't understand the time '" + timestr + "'")
 
@@ -406,6 +442,7 @@ def parse_args(argv=sys.argv):
 
         fn = action_on
         args = {
+            # prefix name with 'job:' is no prefix is given.
             'name': ('job:' if not re.findall(r'^\w{2,5}:', tail[0]) else '') + tail[0],
             'time': to_datetime(' '.join(tail[1:])),
         }
@@ -420,7 +457,7 @@ def parse_args(argv=sys.argv):
 
     elif head in ['l', 'log']:
         fn = action_log
-        args = {'period': tail[0] if tail else None}
+        args = {'period': ' '.join(tail) if tail else None}
 
     elif head in ['t', 'tag']:
         if not tail:
