@@ -31,19 +31,23 @@ Options:
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import json, yaml
+import json
 from datetime import datetime, timedelta
 from collections import defaultdict
 import re
-import os, subprocess, tempfile
+import os
+import subprocess
+import tempfile
 from os import path
 import sys
 
+import yaml
 from colorama import *
+
 init()
 
-class JsonStore(object):
 
+class JsonStore(object):
     def __init__(self, filename):
         self.filename = filename
 
@@ -69,20 +73,23 @@ def red(str):
     else:
         return str
 
+
 def green(str):
     if use_color:
         return Fore.GREEN + str + Fore.RESET
-    else: 
+    else:
         return str
 
+
 def yellow(str):
-    if use_color: 
+    if use_color:
         return Fore.YELLOW + str + Fore.RESET
     else:
         return str
 
+
 def blue(str):
-    if use_color: 
+    if use_color:
         return Fore.BLUE + str + Fore.RESET
     else:
         return str
@@ -115,7 +122,7 @@ def action_on(name, time):
 
     if work and 'end' not in work[-1]:
         print('You are already working on ' + yellow(work[-1]['name']) +
-                '. Stop it or use a different sheet.', file=sys.stderr)
+              '. Stop it or use a different sheet.', file=sys.stderr)
         raise SystemExit(1)
 
     entry = {
@@ -200,7 +207,7 @@ def action_tag(tags):
 
     tag_count = str(len(tags))
     print('Okay, tagged current work with ' + tag_count + ' tag' +
-            ('s' if tag_count > 1 else '') + '.')
+          ('s' if tag_count > 1 else '') + '.')
 
 
 def action_status():
@@ -216,7 +223,7 @@ def action_status():
     diff = timegap(start_time, datetime.utcnow())
 
     print('You have been working on {0} for {1}.'
-            .format(green(current['name']), diff))
+          .format(green(current['name']), diff))
 
 
 def seconds_to_time_message(seconds):
@@ -309,10 +316,10 @@ def action_edit():
     os.remove(temp_path)
 
     try:
-      data = yaml.load(yml)
+        data = yaml.load(yml)
     except:
-      print("Oops, that YAML didn't appear to be valid!", file=sys.stderr)
-      raise SystemExit(1)
+        print("Oops, that YAML didn't appear to be valid!", file=sys.stderr)
+        raise SystemExit(1)
 
     store.dump(data)
 
@@ -326,7 +333,7 @@ def ensure_working():
     if is_working(): return
 
     print("For all I know, you aren't working on anything."
-            " I don't know what to do.", file=sys.stderr)
+          " I don't know what to do.", file=sys.stderr)
     print('See `ti -h` to know how to start working.', file=sys.stderr)
     raise SystemExit(1)
 
@@ -336,7 +343,6 @@ def to_datetime(timestr):
 
 
 def parse_engtime(timestr):
-
     now = datetime.utcnow()
     if not timestr or timestr.strip() == 'now':
         return now
@@ -344,19 +350,19 @@ def parse_engtime(timestr):
     if timestr.strip() == 'today':
         return datetime(year=now.year, month=now.month, day=now.day)
 
-    match = re.match(r'(\d+|a) \s* (s|secs?|seconds?) \s+ ago $', timestr, re.X)
+    match = re.match(r'(\d+|a) \s* (s|secs?|seconds?) (\s+ ago)? $', timestr, re.X)
     if match is not None:
         n = match.group(1)
         seconds = 1 if n == 'a' else int(n)
         return now - timedelta(seconds=seconds)
 
-    match = re.match(r'(\d+|a) \s* (mins?|minutes?) \s+ ago $', timestr, re.X)
+    match = re.match(r'(\d+|a) \s* (mins?|minutes?) (\s+ ago)? $', timestr, re.X)
     if match is not None:
         n = match.group(1)
         minutes = 1 if n == 'a' else int(n)
         return now - timedelta(minutes=minutes)
 
-    match = re.match(r'(\d+|a|an) \s* (hrs?|hours?) \s+ ago $', timestr, re.X)
+    match = re.match(r'(\d+|a|an) \s* (hrs?|hours?) (\s+ ago )?$', timestr, re.X)
     if match is not None:
         n = match.group(1)
         hours = 1 if n in ['a', 'an'] else int(n)
@@ -428,7 +434,7 @@ def parse_args(argv=sys.argv):
 
     head = argv[1]
     tail = argv[2:]
-      
+
     if head in ['-h', '--help', 'h', 'help']:
         helpful_exit()
 
@@ -495,7 +501,7 @@ def main():
 
 
 store = JsonStore(os.getenv('SHEET_FILE', None) or
-                    os.path.expanduser('~/.ti-sheet'))
+                  os.path.expanduser('~/.ti-sheet'))
 
 if __name__ == '__main__':
     use_color = True
